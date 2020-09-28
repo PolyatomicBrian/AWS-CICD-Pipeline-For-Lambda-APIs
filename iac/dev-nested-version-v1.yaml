@@ -1,0 +1,25 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Lambda Versions - V1
+
+Parameters:
+  Alias:
+    Type: String
+  SampleName:
+    Type: String
+
+
+Resources:
+
+  LambdaVersionV1:
+    Type: AWS::Lambda::Version
+    Properties: 
+      Description: "V1 Version"
+      FunctionName: !Ref SampleName
+
+  LambdaAliasV1:
+    Type: AWS::Lambda::Alias
+    Properties: 
+      Description: "V1 Alias"
+      FunctionName: !Ref SampleName
+      FunctionVersion: !GetAtt LambdaVersionV1.Version
+      Name: !Ref Alias

@@ -1,0 +1,19 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Lambda Versions - Dev
+
+Parameters:
+  Alias:
+    Type: String
+  SampleName:
+    Type: String
+
+
+Resources:
+
+  LambdaAliasDev:
+    Type: AWS::Lambda::Alias
+    Properties: 
+      Description: "Dev Alias"
+      FunctionName: !Ref SampleName
+      FunctionVersion: $LATEST
+      Name: !Ref Alias

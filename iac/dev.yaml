@@ -1,0 +1,162 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Project Infra - Main Template
+
+Parameters:
+  ApiGwLambdaRoleName:
+    Type: String
+    Description: "Name of role that allows ApiGW to invoke Lambda"
+    Default: "ApiGwLambdaRole"
+
+
+Mappings:
+  DeploymentConditions:
+    Conditions:
+      CanDeployV1: "True"
+      CanDeployV2: "False"
+  LambdaNames:
+    SampleLambda:
+      Name: "lambda-demo"
+  Aliases:
+    AliasNames:
+      dev: "dev"
+      v1: "v100"
+      v2: "v200"
+
+
+Conditions:
+  CanDeployV1: !Equals [!FindInMap [DeploymentConditions, Conditions, CanDeployV1], "True"]
+  CanDeployV2: !Equals [!FindInMap [DeploymentConditions, Conditions, CanDeployV2], "True"]
+
+
+Resources:
+
+
+  ############
+  #  LAMBDA  #
+  ############
+
+  NestedStackLambda:
+    Type: AWS::CloudFormation::Stack
+    Properties: 
+      Parameters:
+        SampleName: !FindInMap [LambdaNames, SampleLambda, Name]
+      TemplateURL: dev-nested-lambda.yaml
+      TimeoutInMinutes: 20
+
+  #####################
+  #  LAMBDA VERSIONS  #
+  #####################
+
+  NestedStackLambdaVersionDev:
+    Type: AWS::CloudFormation::Stack
+    DependsOn: NestedStackLambda
+    Properties: 
+      Parameters:
+        Alias: !FindInMap [Aliases, AliasNames, dev]
+        SampleName: !FindInMap [LambdaNames, SampleLambda, Name]
+      TemplateURL: dev-nested-version-dev.yaml
+      TimeoutInMinutes: 20
+
+  NestedStackLambdaVersionV1:
+    Type: AWS::CloudFormation::Stack
+    DependsOn: NestedStackLambda
+    Condition: CanDeployV1
+    Properties: 
+      Parameters:
+        Alias: !FindInMap [Aliases, AliasNames, v1]
+        SampleName: !FindInMap [LambdaNames, SampleLambda, Name]
+      TemplateURL: dev-nested-version-v1.yaml
+      TimeoutInMinutes: 20
+
+  NestedStackLambdaVersionV2:
+    Type: AWS::CloudFormation::Stack
+    DependsOn: NestedStackLambda
+    Condition: CanDeployV2
+    Properties: 
+      Parameters:
+        Alias: !FindInMap [Aliases, AliasNames, v2]
+        SampleName: !FindInMap [LambdaNames, SampleLambda, Name]
+      TemplateURL: dev-nested-version-v2.yaml
+      TimeoutInMinutes: 20
+
+  ############
+  # REST API #
+  ############
+
+  RestApi:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+        Body:
+          'Fn::Transform':
+            Name: 'AWS::Include'
+            Parameters:
+              Location: api-swagger.yaml
+        Name: Backend  
+
+  ApiGwLambdaRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      RoleName: !Ref ApiGwLambdaRoleName
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          -
+            Effect: "Allow"
+            Principal:
+              Service:
+                - "apigateway.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+      Path: /
+      ManagedPolicyArns:
+      - arn:aws:iam::aws:policy/service-role/AWSLambdaRole
+
+  DeploymentApiDev:
+    Type: 'AWS::ApiGateway::Deployment'
+    Properties:
+      RestApiId: !Ref RestApi
+      Description: Dev deployment that always points to $LATEST.
+
+  StageApiDev:
+    Type: AWS::ApiGateway::Stage
+    Properties: 
+      DeploymentId: !Ref DeploymentApiDev
+      RestApiId: !Ref RestApi
+      StageName: dev
+      Variables:
+        lambdaAlias: !FindInMap [Aliases, AliasNames, dev]
+
+  DeploymentApiGwV1:
+    Type: 'AWS::ApiGateway::Deployment'
+    Condition: CanDeployV1
+    Properties:
+      RestApiId: !Ref RestApi
+      Description: V1 deployment of RestApi mapping.
+
+  StageApiV1:
+    Type: AWS::ApiGateway::Stage
+    Condition: CanDeployV1
+    Properties: 
+      DeploymentId: !Ref DeploymentApiGwV1
+      RestApiId: !Ref RestApi
+      StageName: V1
+      Variables:
+        lambdaAlias: !FindInMap [Aliases, AliasNames, v1]
+
+  DeploymentApiGwV2:
+    Type: 'AWS::ApiGateway::Deployment'
+    Condition: CanDeployV2
+    Properties:
+      RestApiId: !Ref RestApi
+      StageName: V2
+      Description: V2 deployment of RestApi mapping.
+
+  StageApiV2:
+    Type: AWS::ApiGateway::Stage
+    Condition: CanDeployV2
+    Properties: 
+      DeploymentId: !Ref DeploymentApiGwV2
+      RestApiId: !Ref RestApi
+      StageName: V1
+      Variables:
+        lambdaAlias: !FindInMap [Aliases, AliasNames, v2]

@@ -1,0 +1,39 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Lambda Functions
+
+Parameters:
+  SampleName:
+    Type: String
+    Default: "pipeline-demo"
+
+Resources:
+
+  LambdaRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      RoleName: "lambda-demo-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          -
+            Effect: "Allow"
+            Principal:
+              Service:
+                - "lambda.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+      Path: /
+      ManagedPolicyArns:
+      - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+
+  LambdaFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Ref SampleName
+      Description: !Sub "Demo for Pipeline"
+      Runtime: python3.7
+      Code: "pipeline-lambda.py"
+      Handler: "pipeline-lambda.lambda_handler"
+      MemorySize: 128
+      Timeout: 10
+      Role: !GetAtt LambdaRole.Arn

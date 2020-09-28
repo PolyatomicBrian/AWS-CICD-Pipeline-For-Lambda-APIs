@@ -1,0 +1,103 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Prereqs for Pipeline
+
+Parameters:
+  ToolingAccountNumber:
+    Type: Number
+    Description: AWS Account Number for Tools account
+  BucketName:
+    Type: String
+    Description: "S3 Bucket in Toolings Account"
+  CMKARN:
+    Description: ARN of the KMS CMK creates in Tools account
+    Type: String
+
+
+Resources:
+
+  CFRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: ToolsAcctCodePipelineCloudFormationRole
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          -
+            Effect: Allow
+            Principal:
+              AWS:
+                - !Ref ToolingAccountNumber
+            Action:
+              - sts:AssumeRole
+      Path: /
+  CFPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: ToolsAcctCodePipelineCloudFormationPolicy
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          -
+            Effect: Allow
+            Action:
+              - cloudformation:*
+              - s3:*
+              - iam:PassRole
+            Resource: "*"
+          -
+            Effect: Allow
+            Action:
+              - kms:*
+            Resource: !Ref CMKARN
+      Roles:
+        -
+          !Ref CFRole
+
+  # This role requires permissions to spin up whatever resources you are 
+  # deploying with CloudFormation.
+  CFDeployerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: cloudformationdeployer-role
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          -
+            Effect: Allow
+            Principal:
+              Service:
+                - cloudformation.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: /
+  CFDeployerPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: cloudformationdeployer-policy
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          -
+            Effect: Allow
+            Action:
+              - lambda:*
+              - dynamodb:*
+              - apigateway:*
+              - events:*
+              - iam:*
+              - s3:*
+              - cloudformation:*
+            Resource: "*"
+          -
+            Effect: Allow
+            Action:
+              - s3:PutObject
+              - s3:GetBucketPolicy
+              - s3:GetObject
+              - s3:ListBucket
+            Resource:
+             - !Join ['',['arn:aws:s3:::',!Ref BucketName, '/*']]
+             - !Join ['',['arn:aws:s3:::',!Ref BucketName]]
+      Roles:
+        -
+          !Ref CFDeployerRole

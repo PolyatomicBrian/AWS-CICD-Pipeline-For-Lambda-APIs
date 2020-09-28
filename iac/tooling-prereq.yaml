@@ -1,0 +1,96 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: CodePipeline for the Sample Lambda Function
+Parameters:
+  ProjectName:
+    Description: Name of the Project
+    Type: String
+    Default: sample-lambda
+  DevAccount:
+    Description: AWS Account Number for Dev account.
+    Type: Number
+  ProductionAccount:
+    Description: AWS Account Number for Prod account.
+    Type: Number
+  CodeBuildCondition:
+    Description: Conditionally adds the access required by code build project role
+    Type: String
+    Default: false
+
+Conditions:
+  AddCodeBuildResource: !Equals [ !Ref CodeBuildCondition, true ]
+
+
+Resources:
+
+  ArtifactBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: True
+        BlockPublicPolicy: True
+        IgnorePublicAcls: True
+        RestrictPublicBuckets: True
+
+  KMSKey:
+    Type: AWS::KMS::Key
+    Properties:
+      Description: Used by Assumed Roles in Dev/Prod accounts to Encrypt/Decrypt code
+      EnableKeyRotation: true
+      KeyPolicy:
+        Version: "2012-10-17"
+        Id: !Ref AWS::StackName
+        Statement:
+          -
+            Sid: Permission for Tools account
+            Effect: Allow
+            Principal:
+              AWS: !Sub arn:aws:iam::${AWS::AccountId}:root
+            Action:
+              - "kms:Create*"
+              - "kms:Describe*"
+              - "kms:Enable*"
+              - "kms:List*"
+              - "kms:Put*"
+              - "kms:Update*"
+              - "kms:Revoke*"
+              - "kms:Disable*"
+              - "kms:Get*"
+              - "kms:Delete*"
+              - "kms:ScheduleKeyDeletion"
+              - "kms:CancelKeyDeletion"
+            Resource: "*"
+          -
+            Sid: Allow CodeBuild & other accounts to use key
+            Effect: Allow
+            Principal:
+              AWS:
+                - !Sub arn:aws:iam::${DevAccount}:root
+                 - !Sub arn:aws:iam::${ProductionAccount}:root
+                - !If
+                  - AddCodeBuildResource
+                  - !Sub arn:aws:iam::${AWS::AccountId}:role/${ProjectName}-CodeBuildRole
+                  - !Ref AWS::NoValue
+                - !If
+                  - AddCodeBuildResource
+                  - !Sub arn:aws:iam::${AWS::AccountId}:role/${ProjectName}-codepipeline-role
+                  - !Ref AWS::NoValue
+            Action:
+              - kms:Encrypt
+              - kms:Decrypt
+              - kms:ReEncrypt*
+              - kms:GenerateDataKey*
+              - kms:DescribeKey
+            Resource: "*"
+  KMSAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: alias/codepipeline-crossaccounts
+      TargetKeyId: !Ref KMSKey
+
+Outputs:
+  CMK:
+    Value: !GetAtt KMSKey.Arn
+  ArtifactBucket:
+    Value: !Ref ArtifactBucket
